@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import anthropic
@@ -39,6 +40,8 @@ SORT_OPTIONS = {
 
 BAR_COLOR = "#2a78d6"
 INDUSTRY_SUMMARY_MIN_ARTICLES = 3
+
+READ_ONLY_MODE = os.getenv("READ_ONLY_MODE", "False").strip().lower() == "true"
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -219,6 +222,9 @@ def render_review_actions(row: pd.Series, key_prefix: str, show_approve: bool = 
 
 
 def render_pending_tab(df: pd.DataFrame):
+    if READ_ONLY_MODE:
+        st.info("ℹ️ 현재 읽기 전용 모드입니다. 실제 검토(승인/수정/반려)는 별도 환경에서 진행됩니다.")
+
     render_info_captions()
 
     pending = df[df["review_status"] == "pending"].copy()
@@ -231,29 +237,30 @@ def render_pending_tab(df: pd.DataFrame):
     sort_label = st.selectbox("정렬 기준", list(SORT_OPTIONS.keys()), key="pending_sort")
     pending = sort_dataframe(pending, sort_label)
 
-    pending_row_numbers = [int(r) for r in pending["_row"]]
-    selected_rows = [rn for rn in pending_row_numbers if st.session_state.get(f"pending_select_{rn}", False)]
+    if not READ_ONLY_MODE:
+        pending_row_numbers = [int(r) for r in pending["_row"]]
+        selected_rows = [rn for rn in pending_row_numbers if st.session_state.get(f"pending_select_{rn}", False)]
 
-    if selected_rows:
-        st.info(f"{len(selected_rows)}건 선택됨")
-        bulk_col1, bulk_col2, bulk_col3 = st.columns([1, 1, 2])
+        if selected_rows:
+            st.info(f"{len(selected_rows)}건 선택됨")
+            bulk_col1, bulk_col2, bulk_col3 = st.columns([1, 1, 2])
 
-        if bulk_col1.button("선택 일괄 승인", key="bulk_approve"):
-            for rn in selected_rows:
-                update_row(rn, {"review_status": "approved"})
-            refresh()
-            st.rerun()
+            if bulk_col1.button("선택 일괄 승인", key="bulk_approve"):
+                for rn in selected_rows:
+                    update_row(rn, {"review_status": "approved"})
+                refresh()
+                st.rerun()
 
-        bulk_reason = bulk_col3.selectbox("일괄 반려 사유", REJECT_REASONS, key="bulk_reject_reason")
+            bulk_reason = bulk_col3.selectbox("일괄 반려 사유", REJECT_REASONS, key="bulk_reject_reason")
 
-        if bulk_col2.button("선택 일괄 반려", key="bulk_reject"):
-            ensure_columns(["반려 사유"])
-            for rn in selected_rows:
-                update_row(rn, {"review_status": "rejected", "반려 사유": bulk_reason})
-            refresh()
-            st.rerun()
+            if bulk_col2.button("선택 일괄 반려", key="bulk_reject"):
+                ensure_columns(["반려 사유"])
+                for rn in selected_rows:
+                    update_row(rn, {"review_status": "rejected", "반려 사유": bulk_reason})
+                refresh()
+                st.rerun()
 
-        st.divider()
+            st.divider()
 
     pending_rows = list(pending.iterrows())
     for i in range(0, len(pending_rows), 2):
@@ -262,7 +269,8 @@ def render_pending_tab(df: pd.DataFrame):
             row_number = int(row["_row"])
 
             with col, st.container(border=True):
-                st.checkbox("선택", key=f"pending_select_{row_number}")
+                if not READ_ONLY_MODE:
+                    st.checkbox("선택", key=f"pending_select_{row_number}")
                 st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
                 st.caption(
                     f"{row.get('기업명', '')} · {row.get('카테고리', '')} · "
@@ -270,7 +278,8 @@ def render_pending_tab(df: pd.DataFrame):
                 )
                 st.write(row.get("요약", ""))
 
-                render_review_actions(row, key_prefix="pending")
+                if not READ_ONLY_MODE:
+                    render_review_actions(row, key_prefix="pending")
 
 
 def render_all_tab(df: pd.DataFrame):
@@ -413,19 +422,20 @@ def render_report_tab(df: pd.DataFrame):
         column_config={"원문링크": st.column_config.LinkColumn("원문링크")},
     )
 
-    st.divider()
-    st.subheader("상태 변경")
+    if not READ_ONLY_MODE:
+        st.divider()
+        st.subheader("상태 변경")
 
-    report_rows = list(filtered.iterrows())
-    for i in range(0, len(report_rows), 2):
-        cols = st.columns(2)
-        for col, (_, row) in zip(cols, report_rows[i : i + 2]):
-            with col, st.container(border=True):
-                st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
-                st.caption(f"{row.get('기업명', '')} · {row.get('카테고리', '')} · 중요도 {row.get('중요도 점수', '')}")
-                st.write(row.get("요약", ""))
+        report_rows = list(filtered.iterrows())
+        for i in range(0, len(report_rows), 2):
+            cols = st.columns(2)
+            for col, (_, row) in zip(cols, report_rows[i : i + 2]):
+                with col, st.container(border=True):
+                    st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
+                    st.caption(f"{row.get('기업명', '')} · {row.get('카테고리', '')} · 중요도 {row.get('중요도 점수', '')}")
+                    st.write(row.get("요약", ""))
 
-                render_review_actions(row, key_prefix="report", show_approve=False)
+                    render_review_actions(row, key_prefix="report", show_approve=False)
 
 
 def render_quality_tab(df: pd.DataFrame):
@@ -604,7 +614,8 @@ def render_quality_tab(df: pd.DataFrame):
                     )
                     st.write(row.get("요약", ""))
 
-                    render_rejected_actions(row, key_prefix="rejectlist")
+                    if not READ_ONLY_MODE:
+                        render_rejected_actions(row, key_prefix="rejectlist")
 
 
 def render_rejected_actions(row: pd.Series, key_prefix: str):
