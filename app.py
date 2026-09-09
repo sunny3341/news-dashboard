@@ -42,6 +42,11 @@ BAR_COLOR = "#2a78d6"
 INDUSTRY_SUMMARY_MIN_ARTICLES = 3
 
 READ_ONLY_MODE = os.getenv("READ_ONLY_MODE", "False").strip().lower() == "true"
+READ_ONLY_BANNER = "ℹ️ 현재 읽기 전용 모드입니다. 실제 검토(승인/수정/반려)는 별도 환경에서 진행됩니다."
+
+
+def notify_read_only():
+    st.toast("읽기 전용 모드입니다. 실제 반영되지 않았습니다.", icon="ℹ️")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -162,9 +167,12 @@ def render_review_actions(row: pd.Series, key_prefix: str, show_approve: bool = 
     if show_approve:
         approve_col, edit_col, reject_col = st.columns(3)
         if approve_col.button("승인", key=f"{key_prefix}_approve_{row_number}", width="stretch"):
-            update_row(row_number, {"review_status": "approved"})
-            refresh()
-            st.rerun()
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
+                update_row(row_number, {"review_status": "approved"})
+                refresh()
+                st.rerun()
     else:
         edit_col, reject_col = st.columns(2)
 
@@ -177,11 +185,14 @@ def render_review_actions(row: pd.Series, key_prefix: str, show_approve: bool = 
     if st.session_state.get(reject_key):
         reason = st.selectbox("반려 사유", REJECT_REASONS, key=f"{key_prefix}_reason_{row_number}")
         if st.button("반려 확정", key=f"{key_prefix}_confirm_reject_{row_number}"):
-            ensure_columns(["반려 사유"])
-            update_row(row_number, {"review_status": "rejected", "반려 사유": reason})
-            st.session_state[reject_key] = False
-            refresh()
-            st.rerun()
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
+                ensure_columns(["반려 사유"])
+                update_row(row_number, {"review_status": "rejected", "반려 사유": reason})
+                st.session_state[reject_key] = False
+                refresh()
+                st.rerun()
 
     if st.session_state.get(editor_key):
         edit_df = pd.DataFrame(
@@ -205,25 +216,28 @@ def render_review_actions(row: pd.Series, key_prefix: str, show_approve: bool = 
         )
 
         if st.button("저장", key=f"{key_prefix}_save_{row_number}"):
-            edited_row = edited.iloc[0]
-            update_row(
-                row_number,
-                {
-                    "기업명": edited_row["기업명"],
-                    "카테고리": edited_row["카테고리"],
-                    "중요도 점수": int(edited_row["중요도 점수"]),
-                    "요약": edited_row["요약"],
-                    "review_status": "edited",
-                },
-            )
-            st.session_state[editor_key] = False
-            refresh()
-            st.rerun()
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
+                edited_row = edited.iloc[0]
+                update_row(
+                    row_number,
+                    {
+                        "기업명": edited_row["기업명"],
+                        "카테고리": edited_row["카테고리"],
+                        "중요도 점수": int(edited_row["중요도 점수"]),
+                        "요약": edited_row["요약"],
+                        "review_status": "edited",
+                    },
+                )
+                st.session_state[editor_key] = False
+                refresh()
+                st.rerun()
 
 
 def render_pending_tab(df: pd.DataFrame):
     if READ_ONLY_MODE:
-        st.info("ℹ️ 현재 읽기 전용 모드입니다. 실제 검토(승인/수정/반려)는 별도 환경에서 진행됩니다.")
+        st.info(READ_ONLY_BANNER)
 
     render_info_captions()
 
@@ -237,30 +251,35 @@ def render_pending_tab(df: pd.DataFrame):
     sort_label = st.selectbox("정렬 기준", list(SORT_OPTIONS.keys()), key="pending_sort")
     pending = sort_dataframe(pending, sort_label)
 
-    if not READ_ONLY_MODE:
-        pending_row_numbers = [int(r) for r in pending["_row"]]
-        selected_rows = [rn for rn in pending_row_numbers if st.session_state.get(f"pending_select_{rn}", False)]
+    pending_row_numbers = [int(r) for r in pending["_row"]]
+    selected_rows = [rn for rn in pending_row_numbers if st.session_state.get(f"pending_select_{rn}", False)]
 
-        if selected_rows:
-            st.info(f"{len(selected_rows)}건 선택됨")
-            bulk_col1, bulk_col2, bulk_col3 = st.columns([1, 1, 2])
+    if selected_rows:
+        st.info(f"{len(selected_rows)}건 선택됨")
+        bulk_col1, bulk_col2, bulk_col3 = st.columns([1, 1, 2])
 
-            if bulk_col1.button("선택 일괄 승인", key="bulk_approve"):
+        if bulk_col1.button("선택 일괄 승인", key="bulk_approve"):
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
                 for rn in selected_rows:
                     update_row(rn, {"review_status": "approved"})
                 refresh()
                 st.rerun()
 
-            bulk_reason = bulk_col3.selectbox("일괄 반려 사유", REJECT_REASONS, key="bulk_reject_reason")
+        bulk_reason = bulk_col3.selectbox("일괄 반려 사유", REJECT_REASONS, key="bulk_reject_reason")
 
-            if bulk_col2.button("선택 일괄 반려", key="bulk_reject"):
+        if bulk_col2.button("선택 일괄 반려", key="bulk_reject"):
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
                 ensure_columns(["반려 사유"])
                 for rn in selected_rows:
                     update_row(rn, {"review_status": "rejected", "반려 사유": bulk_reason})
                 refresh()
                 st.rerun()
 
-            st.divider()
+        st.divider()
 
     pending_rows = list(pending.iterrows())
     for i in range(0, len(pending_rows), 2):
@@ -269,8 +288,7 @@ def render_pending_tab(df: pd.DataFrame):
             row_number = int(row["_row"])
 
             with col, st.container(border=True):
-                if not READ_ONLY_MODE:
-                    st.checkbox("선택", key=f"pending_select_{row_number}")
+                st.checkbox("선택", key=f"pending_select_{row_number}")
                 st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
                 st.caption(
                     f"{row.get('기업명', '')} · {row.get('카테고리', '')} · "
@@ -278,8 +296,7 @@ def render_pending_tab(df: pd.DataFrame):
                 )
                 st.write(row.get("요약", ""))
 
-                if not READ_ONLY_MODE:
-                    render_review_actions(row, key_prefix="pending")
+                render_review_actions(row, key_prefix="pending")
 
 
 def render_all_tab(df: pd.DataFrame):
@@ -329,6 +346,9 @@ def render_all_tab(df: pd.DataFrame):
 
 
 def render_report_tab(df: pd.DataFrame):
+    if READ_ONLY_MODE:
+        st.info(READ_ONLY_BANNER)
+
     render_info_captions()
 
     report_df = df[df["review_status"].isin(REPORT_STATUSES)].copy()
@@ -422,23 +442,25 @@ def render_report_tab(df: pd.DataFrame):
         column_config={"원문링크": st.column_config.LinkColumn("원문링크")},
     )
 
-    if not READ_ONLY_MODE:
-        st.divider()
-        st.subheader("상태 변경")
+    st.divider()
+    st.subheader("상태 변경")
 
-        report_rows = list(filtered.iterrows())
-        for i in range(0, len(report_rows), 2):
-            cols = st.columns(2)
-            for col, (_, row) in zip(cols, report_rows[i : i + 2]):
-                with col, st.container(border=True):
-                    st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
-                    st.caption(f"{row.get('기업명', '')} · {row.get('카테고리', '')} · 중요도 {row.get('중요도 점수', '')}")
-                    st.write(row.get("요약", ""))
+    report_rows = list(filtered.iterrows())
+    for i in range(0, len(report_rows), 2):
+        cols = st.columns(2)
+        for col, (_, row) in zip(cols, report_rows[i : i + 2]):
+            with col, st.container(border=True):
+                st.markdown(f"**[{row.get('뉴스 제목', '(제목 없음)')}]({row.get('원문링크', '')})**")
+                st.caption(f"{row.get('기업명', '')} · {row.get('카테고리', '')} · 중요도 {row.get('중요도 점수', '')}")
+                st.write(row.get("요약", ""))
 
-                    render_review_actions(row, key_prefix="report", show_approve=False)
+                render_review_actions(row, key_prefix="report", show_approve=False)
 
 
 def render_quality_tab(df: pd.DataFrame):
+    if READ_ONLY_MODE:
+        st.info(READ_ONLY_BANNER)
+
     st.subheader("검토 현황")
 
     status_counts = (
@@ -614,8 +636,7 @@ def render_quality_tab(df: pd.DataFrame):
                     )
                     st.write(row.get("요약", ""))
 
-                    if not READ_ONLY_MODE:
-                        render_rejected_actions(row, key_prefix="rejectlist")
+                    render_rejected_actions(row, key_prefix="rejectlist")
 
 
 def render_rejected_actions(row: pd.Series, key_prefix: str):
@@ -643,10 +664,13 @@ def render_rejected_actions(row: pd.Series, key_prefix: str):
 
         if mode == "그대로 승인":
             if st.button("승인 확정", key=f"{key_prefix}_approve_confirm_{row_number}"):
-                update_row(row_number, {"review_status": "approved"})
-                st.session_state[approve_open_key] = False
-                refresh()
-                st.rerun()
+                if READ_ONLY_MODE:
+                    notify_read_only()
+                else:
+                    update_row(row_number, {"review_status": "approved"})
+                    st.session_state[approve_open_key] = False
+                    refresh()
+                    st.rerun()
         else:
             edit_df = pd.DataFrame(
                 [
@@ -669,20 +693,23 @@ def render_rejected_actions(row: pd.Series, key_prefix: str):
             )
 
             if st.button("저장 후 승인", key=f"{key_prefix}_approve_save_{row_number}"):
-                edited_row = edited.iloc[0]
-                update_row(
-                    row_number,
-                    {
-                        "기업명": edited_row["기업명"],
-                        "카테고리": edited_row["카테고리"],
-                        "중요도 점수": int(edited_row["중요도 점수"]),
-                        "요약": edited_row["요약"],
-                        "review_status": "approved",
-                    },
-                )
-                st.session_state[approve_open_key] = False
-                refresh()
-                st.rerun()
+                if READ_ONLY_MODE:
+                    notify_read_only()
+                else:
+                    edited_row = edited.iloc[0]
+                    update_row(
+                        row_number,
+                        {
+                            "기업명": edited_row["기업명"],
+                            "카테고리": edited_row["카테고리"],
+                            "중요도 점수": int(edited_row["중요도 점수"]),
+                            "요약": edited_row["요약"],
+                            "review_status": "approved",
+                        },
+                    )
+                    st.session_state[approve_open_key] = False
+                    refresh()
+                    st.rerun()
 
     if st.session_state.get(reason_open_key):
         current_reason = row.get("반려 사유", "")
@@ -695,10 +722,13 @@ def render_rejected_actions(row: pd.Series, key_prefix: str):
         )
 
         if st.button("반려 사유 저장", key=f"{key_prefix}_reason_confirm_{row_number}"):
-            update_row(row_number, {"반려 사유": new_reason})
-            st.session_state[reason_open_key] = False
-            refresh()
-            st.rerun()
+            if READ_ONLY_MODE:
+                notify_read_only()
+            else:
+                update_row(row_number, {"반려 사유": new_reason})
+                st.session_state[reason_open_key] = False
+                refresh()
+                st.rerun()
 
 
 def summarize_industry_issues(summaries: list[str]) -> str:
