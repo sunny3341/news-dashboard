@@ -1,0 +1,10 @@
+streamlit>=1.38
+requests>=2.32
+python-dotenv>=1.0
+pandas>=2.2
+feedparser>=6.0
+gspread>=6.1
+google-auth>=2.34
+anthropic>=0.69
+pydantic>=2.7
+plotly>=5.24
