@@ -2,6 +2,7 @@ import os
 
 import gspread
 import pandas as pd
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,15 +11,37 @@ SERVICE_ACCOUNT_FILE = "service_account.json"
 SHEET_URL = os.getenv("SHEET_URL", "")
 
 
-def get_worksheet(worksheet_name: str | None = None) -> gspread.Worksheet:
-    """service_account.json으로 인증하고 SHEET_URL의 워크시트를 반환합니다.
+def _get_service_account_secret() -> dict | None:
+    """Streamlit Cloud의 st.secrets에 등록된 서비스 계정 정보를 반환합니다.
 
+    로컬 개발 환경처럼 secrets.toml이 없으면 None을 반환해 파일 기반 인증으로
+    넘어가도록 합니다.
+    """
+    try:
+        if "gcp_service_account" in st.secrets:
+            return dict(st.secrets["gcp_service_account"])
+    except Exception:
+        return None
+
+    return None
+
+
+def get_worksheet(worksheet_name: str | None = None) -> gspread.Worksheet:
+    """서비스 계정으로 인증하고 SHEET_URL의 워크시트를 반환합니다.
+
+    Streamlit Cloud에 배포된 경우 st.secrets["gcp_service_account"]를 사용하고,
+    로컬 개발 환경에서는 기존처럼 service_account.json 파일을 읽습니다.
     worksheet_name을 지정하지 않으면 첫 번째 시트를 사용합니다.
     """
     if not SHEET_URL:
         raise RuntimeError("SHEET_URL이 .env에 설정되어 있지 않습니다.")
 
-    client = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+    service_account_secret = _get_service_account_secret()
+    if service_account_secret:
+        client = gspread.service_account_from_dict(service_account_secret)
+    else:
+        client = gspread.service_account(filename=SERVICE_ACCOUNT_FILE)
+
     spreadsheet = client.open_by_url(SHEET_URL)
 
     if worksheet_name:
