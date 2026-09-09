@@ -80,6 +80,20 @@ streamlit run app.py
 
 브라우저에서 `http://localhost:8501` 로 접속하면 대시보드를 확인할 수 있습니다.
 
+## GitHub Actions로 매일 자동 수집
+
+`.github/workflows/daily.yml`이 매일 한국시간(KST) 오전 9시에 `collect.py`를 자동으로 실행합니다. 저장소의 **Settings → Secrets and variables → Actions**에서 아래 Secrets를 등록해야 합니다.
+
+| Secret 이름 | 값 |
+|---|---|
+| `NAVER_CLIENT_ID` | 네이버 API HUB Client ID |
+| `NAVER_CLIENT_SECRET` | 네이버 API HUB Client Secret |
+| `ANTHROPIC_API_KEY` | Claude API 키 |
+| `SHEET_URL` | 결과를 저장할 Google Sheets URL |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | `service_account.json` 파일 내용 전체를 그대로 붙여넣기 |
+
+`SEARCH_KEYWORDS`, `MAX_ARTICLES`는 민감 정보가 아니라서 워크플로우 파일(`daily.yml`) 안에 직접 값이 들어 있습니다. 바꾸고 싶으면 그 파일을 직접 수정하면 됩니다. `Actions` 탭에서 `workflow_dispatch`로 수동 실행해 정상 동작하는지 먼저 확인해보는 것을 추천합니다.
+
 ## TODO
 
 - [ ] 정기 실행(스케줄러)으로 리포트 자동 생성/전송 (예: 매일 아침 이메일 또는 슬랙 발송)

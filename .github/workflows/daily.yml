@@ -1,0 +1,38 @@
+name: Daily News Collection
+
+on:
+  schedule:
+    # 매일 한국시간(KST, UTC+9) 오전 9시 = UTC 전날 00:00
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write Google service account credentials
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > service_account.json
+
+      - name: Run collect.py
+        env:
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SHEET_URL: ${{ secrets.SHEET_URL }}
+          # 민감 정보가 아니므로 시크릿 대신 여기서 직접 관리합니다. 필요하면 값만 수정하세요.
+          SEARCH_KEYWORDS: "취업,채용,공채,인턴,신입,AI 채용,AI 인재,데이터 분석가 채용,빅데이터 채용,헬스케어 채용,바이오 채용,구조조정,신사업 진출"
+          MAX_ARTICLES: "10"
+        run: python collect.py
