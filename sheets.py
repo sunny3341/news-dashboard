@@ -20,7 +20,11 @@ def _get_service_account_secret() -> dict | None:
     try:
         if "gcp_service_account" in st.secrets:
             return dict(st.secrets["gcp_service_account"])
-    except Exception:
+    except Exception as e:
+        # 여기서 조용히 넘어가면 "시크릿을 등록했는데도 파일 인증으로 폴백되는"
+        # 원인을 알 수 없게 되므로, 실패 사유를 로그로 남긴다
+        # (Streamlit Cloud의 'Manage app' 로그에서 확인 가능).
+        print(f"[sheets] st.secrets에서 gcp_service_account를 읽지 못했습니다: {e!r}")
         return None
 
     return None
